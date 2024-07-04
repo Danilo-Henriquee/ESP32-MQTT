@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <link rel="stylesheet" href="style.css">
+        <title>DWEB08</title>
+    </head>
+    <body>
+        <div class="container">
+            <h1>DEMANDAWEB DWEB-08</h1>
+            <div class="panel">
+                <h2>STATUS</h2>
+                <div class="container-items">
+<!--                     <div id="item1" class="item panel-grid-column">
+                        <h5>GPIO</h5>
+                        <h5>TRUE</h5>
+                    </div>
+                    <div id="item2" class="item panel-grid-column">
+                        <h5>Contador</h5>
+                        <h5>3456</h5>
+                    </div>
+                    <div id="item3" class="item panel-grid-column">
+                        <h5>Temperatura</h5>
+                        <h5>24.56 C°</h5>
+                    </div> -->
+                </div>
+            </div>
+            <div class="panel panel-grid-row" id="network-panel">
+                <h1>NETWORK</h1>
+                <div class="panel panel-grid-column">
+                    <h2>MODE</h2>
+                    <div style="display: flex;">
+                        <label>
+                            <p>Station</p>
+                            <input type="checkbox" id="station" class="network" checked>
+                        </label>
+                        <label>
+                            <p>Acess Point</p>
+                            <input type="checkbox" id="acessPoint" class="network">
+                        </label> 
+                    </div>
+                </div>
+                <label>
+                    <p>IP</p>
+                    <input type="text" id="ip" class="network" ipv4 placeholder="192.168.1.10">
+                </label>
+                <label>
+                    <p>Gateway</p>
+                    <input type="text" id="gateway" class="network" ipv4 placeholder="192.168.1.1">
+                </label>
+                <label>
+                    <p>Subnet</p>
+                    <input type="text" id="subnet" class="network" ipv4 placeholder="255.255.255.0">
+                </label>
+                <label>
+                    <p>DNS</p>
+                    <input type="text" id="dns" class="network" ipv4 placeholder="8.8.8.8">
+                </label>
+
+                <div class="panel-grid panel">
+                    <h2>WIFI</h2>
+                    <label>
+                        <p>SSID</p>
+                        <input type="text" id="ssid" class="network" placeholder="SSID">
+                    </label>
+                    <label>
+                        <p>Password</p>
+                        <input type="text" id="wifiPass" class="network" placeholder="PASSWORD">
+                    </label>
+                </div>
+                
+                <button id="network-save" class="panel-button">Save</button>
+            </div>
+
+            <div class="panel panel-grid-row" id="mqtt-panel">
+                <h1>MQTT</h1>
+                <label>
+                    <p>Broker</p>
+                    <input type="text" id="broker" class="mqtt" placeholder="BROKER">
+                </label>
+                <label>
+                    <p>Port</p>
+                    <input type="text" id="port" class="mqtt" placeholder="PORT" maxlength="5">
+                </label>
+                <label>
+                    <p>Client id</p>
+                    <input type="text" id="clientId" class="mqtt" placeholder="CLIENT ID">
+                </label>
+                <label>
+                    <p>Client</p>
+                    <input type="text" id="client" class="mqtt" placeholder="CLIENT">
+                </label>
+                <label>
+                    <p>Password</p>
+                    <input type="text" id="clientPass" class="mqtt" placeholder="PASSWORD">
+                </label>
+                <label>
+                    <p>Topic</p>
+                    <input type="text" id="topic" class="mqtt" placeholder="TOPIC">
+                </label>
+                <label>
+                    <p>Interval (Seconds)</p>
+                    <input type="text" id="interval" class="mqtt" placeholder="300">
+                </label>
+                <button id="mqtt-save" class="panel-button">Save</button>
+            </div>
+            <button id="apply-changes" class="panel-button">Apply changes</button>
+        </div>
+        <script src="main.js"></script>
+    </body>
+</html>

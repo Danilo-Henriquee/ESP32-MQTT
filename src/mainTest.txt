@@ -1,0 +1,82 @@
+#include <Arduino.h>
+#include <LittleFS.h>
+#include <EEPROM.h>
+
+#define TEMP_PIN 4
+#define INPUT_PIN 34
+
+#include "ComponentClass.hpp"
+
+Component comp;
+PubSubClient* mqtt;
+
+unsigned long startTime;
+uint16_t interval;
+
+volatile bool saveCounter = false;
+volatile unsigned int counter; 
+
+void Task1(void *pvParameters) {
+
+    while (true) {
+        mqtt->loop();
+
+        if (saveCounter) {
+            saveCounter = false;
+            counter = comp.incrementCounter();
+            EEPROM.write(0, counter);
+            EEPROM.commit();
+        }
+
+        if (millis() - startTime > (interval * 1000)) {
+            comp.publishDweb08Data();
+            startTime = millis();
+        }
+
+        vTaskDelay(10 / portTICK_PERIOD_MS);
+    }
+}
+
+void Task2(void *pvParameters) {
+    unsigned int attempts = 0;
+
+    while (true) {
+        if (WiFi.status() != WL_CONNECTED) {
+            if (comp.beginWifi()) {
+                comp.beginMqtt();
+                return;
+            };
+            counter++;
+        }
+        if (counter > 9) {
+            ESP.restart();
+        }
+        vTaskDelay(1000 / portTICK_PERIOD_MS);
+    }
+}
+
+void setup() {
+    LittleFS.begin();
+    EEPROM.begin(8);
+    Serial.begin(9600);
+    
+    pinMode(INPUT_PIN, INPUT);
+
+    comp.begin();
+    mqtt = comp.getMqtt();
+
+    comp.setCounter(EEPROM.read(0));
+
+    attachInterrupt(digitalPinToInterrupt(INPUT_PIN), []() {
+        saveCounter = true;
+    }, RISING);
+
+    interval = comp.getInterval();
+    startTime = millis();
+
+    xTaskCreatePinnedToCore(Task1, "Task1", 10000, NULL, 1, NULL, 0);
+    xTaskCreatePinnedToCore(Task2, "Task2", 10000, NULL, 1, NULL, 1);
+}
+
+void loop() {
+}
