@@ -5,6 +5,7 @@
 #include <PubSubClient.h>
 #include <AsyncJson.h>
 #include <ArduinoJson.h>
+#include "esp_task_wdt.h"
 
 #include <DallasTemperature.h>
 #include <OneWire.h>
@@ -30,6 +31,7 @@ struct NET_TEMPLATE {
     int acessPoint;
     String ssid;
     String wifiPass;
+    bool isConfigured;
 
     NET_TEMPLATE() :
         ip(IPAddress{}),
@@ -37,7 +39,8 @@ struct NET_TEMPLATE {
         dns(IPAddress{}),
         subnet(IPAddress{}),
         ssid(""),
-        wifiPass("")
+        wifiPass(""),
+        isConfigured(false)
     {}
 };
 
@@ -49,6 +52,7 @@ struct MQTT_TEMPLATE {
     String clientPass;
     String topic;
     uint16_t interval;
+    bool isConfigured;
 
     MQTT_TEMPLATE() :
         broker(""),
@@ -56,7 +60,8 @@ struct MQTT_TEMPLATE {
         client(""),
         clientPass(""),
         topic(""),
-        interval(0)
+        interval(0),
+        isConfigured(false)
     {}     
 };
 
@@ -69,24 +74,31 @@ class Component {
 
         NET_TEMPLATE netConfig;
         MQTT_TEMPLATE mqttConfig;
-
+        
+        unsigned int restartReason; 
         unsigned int counter;
     public:
         void begin() {
-            
             // file system init
             LittleFS.begin();
             
+            // load the int number that represents the reason of the restart.
+            // 1 = EN button
+            // 3 = Software reason, like ESP.restart()
+            this->restartReason = (int) esp_reset_reason();
+
             // load wifi and mqtt configuration from file system
             this->loadConfiguration();
 
             // begin connection to a wifi or init a acess point
-            // returns 1 for connection established to wifi provided
-            // returns 0 for acess point
-            if (this->beginWifi()) {
-                // begin connection to MQTT broker if is connected to wifi
+            this->beginWifi();
+
+            this->configureNetworkListener();
+
+            // begin connection to MQTT broker if is connected to wifi
+            /* if (WiFi.status() == WL_CONNECTED) {
                 this->beginMqtt();
-            };
+            } */
 
             // load web interface
             this->configWebInterface();
@@ -103,7 +115,10 @@ class Component {
             File networkConfigurationFile = LittleFS.open("/network.json", "r");
 
             // verify if file is present and if it's content are not 0
-            if (!networkConfigurationFile && networkConfigurationFile.size() != 0) return;
+            if (!networkConfigurationFile && networkConfigurationFile.size() != 0) {
+                this->netConfig.isConfigured = false;
+                return;
+            }
             JsonDocument networkJson;
             deserializeJson(networkJson, networkConfigurationFile.readString());
             
@@ -116,13 +131,18 @@ class Component {
             this->netConfig.wifiPass    = networkJson["wifiPass"].as<String>();
             this->netConfig.stationMode = networkJson["station"].as<int>();
 
+            if (!this->netConfig.ip.toString().isEmpty()) this->netConfig.isConfigured = true;
+            
             networkConfigurationFile.close();
 
             // open mqtt file
             File mqttConfigurationFile = LittleFS.open("/mqtt.json", "r");
 
             // verify if file is present and if it's content are not 0
-            if (!mqttConfigurationFile && mqttConfigurationFile != 0) return;
+            if (!mqttConfigurationFile && mqttConfigurationFile.size() != 0) {
+                this->mqttConfig.isConfigured = false;
+                return;
+            }
             JsonDocument mqttJson;
             deserializeJson(mqttJson, mqttConfigurationFile.readString());
 
@@ -135,6 +155,8 @@ class Component {
             this->mqttConfig.clientPass = mqttJson["clientPass"] .as<String>();
             this->mqttConfig.interval   = mqttJson["interval"]   .as<uint16_t>();
 
+            if (!this->mqttConfig.broker.isEmpty()) this->mqttConfig.isConfigured = true;
+
             mqttConfigurationFile.close();
 
             // feedback serial
@@ -142,45 +164,99 @@ class Component {
             Serial.println("--------------------");
         }
 
-        int beginWifi() {
-            // check the station mode. Station = 1, Acess point = 0.
-            // Assume that the rest of the values are filled. (Front-end validation)
-            if (this->netConfig.stationMode && !this->netConfig.ssid.isEmpty()) {
-                Serial.print("Connecting to wifi.");
-                WiFi.config(
-                    this->netConfig.ip,
-                    this->netConfig.gateway,
-                    this->netConfig.subnet,
-                    DNS, // google DNS
-                    this->netConfig.dns
-                );
-
-                WiFi.begin(this->netConfig.ssid, this->netConfig.wifiPass);
-
-                unsigned long startTime = millis();
-                while (WiFi.status() != WL_CONNECTED) {
-                    delay(500);
-                    Serial.print(".");
-
-                    if (millis() - startTime > 10000) {
-                        Serial.println("Connection timeout.");
-                        this->beginSoftAP();
-                        return 0;
-                    }
-                }
-
-                Serial.println();
-                Serial.println("Wifi connected.");
-                Serial.println(this->netConfig.ip.toString());
-                Serial.println("--------------------");
-
-                return 1;
+        void beginWifi() {
+            // If the restart reason is caused by EN ESP32 button trigger, start softAP.
+            if (this->restartReason == 1) {
+                this->beginSoftAP();
+                return;
             }
 
-            if (this->netConfig.ssid.isEmpty()) Serial.println("Network configuration is empty.");
-            this->beginSoftAP();
+            // check if network is configured
+            if (this->netConfig.isConfigured) {
+                Serial.println("Network is configured.");
+                // check the station mode. Station = 1, Acess point = 0.
+                if (this->netConfig.stationMode) {
+                    Serial.println("Configuring network.");
 
-            return 0;
+                    WiFi.config(
+                        this->netConfig.ip,
+                        this->netConfig.gateway,
+                        this->netConfig.subnet,
+                        DNS, // google DNS
+                        this->netConfig.dns
+                    );
+
+                    WiFi.begin(this->netConfig.ssid, this->netConfig.wifiPass);
+
+                    Serial.print("Trying to connect to wifi.");
+
+                    unsigned int attempts = 0;
+                    unsigned long startTime = millis();
+                    while (WiFi.status() != WL_CONNECTED) {
+                        delay(500);
+                        Serial.print(".");
+
+                        if (millis() - startTime > 10000) {
+                            Serial.println();
+                            Serial.println("Connection timeout.");
+                            Serial.print("Trying again.");
+                            startTime = millis();
+                            attempts++;
+                            continue;
+                        }
+                        if (attempts == 10) {
+                            Serial.println();
+                            Serial.println("Connection failed.");
+                            Serial.println("Restarting...");
+                            delay(1000);
+                            ESP.restart();
+                        }
+                    }
+
+                    Serial.println();
+                    Serial.println("Wifi connected.");
+                    Serial.println(this->netConfig.ip.toString());
+                    Serial.println("--------------------");
+                }
+            }
+            else {
+                // if wifi is not configured
+                Serial.println("Network configuration is empty.");
+                this->beginSoftAP();
+            }
+        }
+
+        void configureNetworkListener() {
+            xTaskCreatePinnedToCore([](void* pvParameters) {
+                while (true) {
+                    unsigned int attempts = 0;
+                    unsigned long startTime = millis();
+                    while (WiFi.status() == WL_CONNECTION_LOST) {
+                        vTaskDelay(500 / portTICK_PERIOD_MS);
+                        WiFi.reconnect();
+
+                        esp_task_wdt_reset();
+                        
+                        if (millis() - startTime > 10000) {
+                            Serial.println("Connection timeout.");
+                            vTaskDelay(50 / portTICK_PERIOD_MS);
+                            startTime = millis();
+                            attempts++;
+                            continue;
+                        }
+                        if (attempts == 10) {
+                            Serial.println("Connection failed.");
+                            vTaskDelay(50 / portTICK_PERIOD_MS);
+                            Serial.println("Restarting...");
+                            vTaskDelay(1000 / portTICK_PERIOD_MS);
+                            ESP.restart();
+                        }
+                        esp_task_wdt_reset();
+                        vTaskDelay(500 / portTICK_PERIOD_MS);
+                    }
+                    vTaskDelay(1000 / portTICK_PERIOD_MS);
+                }
+            }, "configureNetworkListener", 4096, NULL, 1, NULL, tskNO_AFFINITY);
         }
 
         void beginMqtt() {
@@ -271,7 +347,7 @@ class Component {
                 File file = LittleFS.open("/main.js", "r");
                 String scriptContent = file.readString();
 
-                if (this->netConfig.stationMode) {
+                if (this->netConfig.stationMode && this->restartReason != 1) {
                     scriptContent.replace("__IPADDRESS_VALUE__", this->netConfig.ip.toString());
                     request->send(200, "application/javascript", scriptContent);
                     return;
@@ -283,7 +359,6 @@ class Component {
 
             this->server.on("/restart", HTTP_GET, [](AsyncWebServerRequest* request) {
                 request->send(200);
-                delay(5000);
                 ESP.restart();
             });
 
