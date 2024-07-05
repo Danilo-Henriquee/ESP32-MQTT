@@ -91,14 +91,20 @@ class Component {
             this->loadConfiguration();
 
             // begin connection to a wifi or init a acess point
-            this->beginWifi();
-
-            this->configureNetworkListener();
+            if (this->netConfig.isConfigured) {
+                this->beginWifi();
+                if (WiFi.status() == WL_CONNECTED) {
+                    this->configureNetworkListener();
+                }
+            }
 
             // begin connection to MQTT broker if is connected to wifi
-            /* if (WiFi.status() == WL_CONNECTED) {
+            if (this->mqttConfig.isConfigured && WiFi.status() == WL_CONNECTED) {
                 this->beginMqtt();
-            } */
+                if (this->mqtt.connected()) {
+                    this->configureMqttListener();
+                }
+            }
 
             // load web interface
             this->configWebInterface();
@@ -115,8 +121,9 @@ class Component {
             File networkConfigurationFile = LittleFS.open("/network.json", "r");
 
             // verify if file is present and if it's content are not 0
-            if (!networkConfigurationFile && networkConfigurationFile.size() != 0) {
+            if (!networkConfigurationFile.available() || networkConfigurationFile.size() == 0) {
                 this->netConfig.isConfigured = false;
+                networkConfigurationFile.close();
                 return;
             }
             JsonDocument networkJson;
@@ -139,8 +146,9 @@ class Component {
             File mqttConfigurationFile = LittleFS.open("/mqtt.json", "r");
 
             // verify if file is present and if it's content are not 0
-            if (!mqttConfigurationFile && mqttConfigurationFile.size() != 0) {
+            if (!mqttConfigurationFile.available() && mqttConfigurationFile.size() == 0) {
                 this->mqttConfig.isConfigured = false;
+                mqttConfigurationFile.close();
                 return;
             }
             JsonDocument mqttJson;
@@ -260,19 +268,12 @@ class Component {
         }
 
         void beginMqtt() {
-           // Assume that the rest of the values are filled. (Front-end validation) 
-            if (this->mqttConfig.broker.isEmpty()) {
-                Serial.println("Mqtt configuration is empty. Skipping...");
-                return;
-            }
-
             this->mqtt.setServer(
                 this->mqttConfig.broker.c_str(),
                 this->mqttConfig.port
             );
 
             // attempt to connect to broker
-            
             this->mqtt.connect(
                 this->mqttConfig.clientId.c_str(),
                 this->mqttConfig.client.c_str(),
@@ -280,16 +281,24 @@ class Component {
             );
             
             Serial.print("Connecting to mqtt...");
-            unsigned long startedTime = millis();
+            unsigned int attempts = 0;
+            unsigned long startTime = millis();
             while (this->mqtt.state() !=  MQTT_CONNECTED) {
                 delay(500);
                 Serial.print(".");
 
-                if (millis() - startedTime > 10000) {
+                if (millis() - startTime > 10000) {
                     Serial.println();
                     Serial.println(this->mqtt.state());
                     Serial.println("Connection timeout.");
-                    return;
+                    startTime = millis();
+                    attempts++;
+                    continue;
+                }
+                if (attempts > 10) {
+                    Serial.println("Reconnection failed");
+                    Serial.println("Restaring...");
+                    ESP.restart();
                 }
             }
             Serial.println();
@@ -332,6 +341,20 @@ class Component {
                 }
             );
             Serial.println("--------------------");
+        }
+
+        void configureMqttListener() {
+            xTaskCreatePinnedToCore([](void* pvParameters) {
+                Component* comp = static_cast<Component*>(pvParameters);
+
+                while (true) {
+                    if (WiFi.status() == WL_CONNECTED && !comp->getMqtt()->connected()) {
+                        comp->beginMqtt();
+                    }
+
+                    vTaskDelay(1000 / portTICK_PERIOD_MS);
+                }
+            }, "configureMqttListener", 4096, this, 1, NULL, tskNO_AFFINITY);
         }
 
         void configWebInterface() {
