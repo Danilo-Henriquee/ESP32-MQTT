@@ -2,52 +2,37 @@ const networkButton = document.querySelector("#network-save");
 const mqttButton = document.querySelector("#mqtt-save");
 const applyBytton = document.querySelector("#apply-changes");
 
-const station = document.querySelector("#station");
 const dhcp = document.querySelector("#dhcp");
 
 let __IPADDRESS__ = "__IPADDRESS_VALUE__";
 
 networkButton.addEventListener("click", () => sendData("network", 7));
+
 mqttButton.addEventListener("click", () => sendData("mqtt", 7));
+
 applyBytton.addEventListener("click", () => {
     if (confirm("You confirm to apply changes?")) applyChanges();
 });
 
-let inputs = document.querySelectorAll('input[type="text"], input[type="password"]');
+let inputs = document.querySelectorAll('input[type="text"]');
 
 document.addEventListener("DOMContentLoaded", () => requestData());
 
-station.addEventListener("change", function() {
+dhcp.addEventListener("change", function() {
     for (let input of inputs) {
-        if (this.checked) {
-            input.disabled = false;
-            return;
-        }
-        input.disabled = true;
+        if (this.checked) input.disabled = true;
+        else input.disabled = false;
     };
 });
-
-station.addEventListener("change", function() {
-    for (let input of inputs) {
-        if (this.checked) {
-            input.disabled = true;
-            return;
-        }
-        input.checked = false;
-    };
-});
-
 
 // Send data to save the configuration
 function sendData(classData, objLength) {
+
     // validate form inputs before send
     let bodyData = validateData(document.querySelectorAll(`.${classData}`));
 
     if (classData != "mqtt") {
-        bodyData["station"] = station.checked ? 1 : 0;
         bodyData["dhcp"] = dhcp.checked ? 1 : 0;
-
-        console.log(bodyData);
     }
 
     if (Object.keys(bodyData).length == objLength) {
@@ -175,15 +160,12 @@ function loadContent(configs) {
 
     if (configs.hasOwnProperty("network") && configs.network != null) {
         inputsNetwork.forEach(input => {
-            if (input.type == "checkbox") {
-                if (configs.network.station) {
-                    input.checked = true;
-                    acessPoint.checked = false;
-                }
-                else {
-                    input.checked = false;
-                    acessPoint.checked = true;
-                }
+            if (input.type == "checkbox" && configs.network[input.id] == 1) {
+                input.checked = true;
+
+                for (let inp of inputs) {
+                    inp.disabled = true;
+                };
             }
             input.value = configs.network[input.id];
         });
