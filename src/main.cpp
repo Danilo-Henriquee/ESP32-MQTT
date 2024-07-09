@@ -3,6 +3,7 @@
 #include <EEPROM.h>
 
 #define TEMP_PIN 4
+#define RESET_PIN 5
 #define INPUT_PIN 34
 
 #include "ComponentClass.hpp"
@@ -15,6 +16,8 @@ uint16_t interval;
 
 volatile bool saveCounter = false;
 volatile unsigned int counter; 
+
+volatile bool reset = false;
 
 void setup() {
     LittleFS.begin();
@@ -32,6 +35,10 @@ void setup() {
         saveCounter = true;
     }, RISING);
 
+    attachInterrupt(digitalPinToInterrupt(RESET_PIN), []() {
+        reset = true;
+    }, FALLING);
+
     interval = comp.getInterval();
     startTime = millis();
 }
@@ -44,6 +51,13 @@ void loop() {
         counter = comp.incrementCounter();
         EEPROM.write(0, counter);
         EEPROM.commit();
+    }
+
+    if (reset) {
+        EEPROM.write(1, 1);
+        EEPROM.commit();
+        delay(5000);
+        ESP.restart();
     }
 
     if (millis() - startTime > (interval * 1000)) {

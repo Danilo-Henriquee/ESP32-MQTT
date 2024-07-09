@@ -3,7 +3,7 @@ const mqttButton = document.querySelector("#mqtt-save");
 const applyBytton = document.querySelector("#apply-changes");
 
 const station = document.querySelector("#station");
-const acessPoint = document.querySelector("#acessPoint");
+const dhcp = document.querySelector("#dhcp");
 
 let __IPADDRESS__ = "__IPADDRESS_VALUE__";
 
@@ -18,27 +18,25 @@ let inputs = document.querySelectorAll('input[type="text"], input[type="password
 document.addEventListener("DOMContentLoaded", () => requestData());
 
 station.addEventListener("change", function() {
-    if (this.checked) {
-        acessPoint.checked = false;
-        inputs.forEach(input => input.disabled = false);
-
-    }
-    else {
-        acessPoint.checked = true;
-        acessPoint.dispatchEvent(new Event("change"));
-    }
+    for (let input of inputs) {
+        if (this.checked) {
+            input.disabled = false;
+            return;
+        }
+        input.disabled = true;
+    };
 });
 
-acessPoint.addEventListener("change", function() {
-    if (this.checked) {
-        station.checked = false;
-        inputs.forEach(input => input.disabled = true);
-    }
-    else {
-        station.checked = true;
-        station.dispatchEvent(new Event("change"));
-    }
+station.addEventListener("change", function() {
+    for (let input of inputs) {
+        if (this.checked) {
+            input.disabled = true;
+            return;
+        }
+        input.checked = false;
+    };
 });
+
 
 // Send data to save the configuration
 function sendData(classData, objLength) {
@@ -46,8 +44,10 @@ function sendData(classData, objLength) {
     let bodyData = validateData(document.querySelectorAll(`.${classData}`));
 
     if (classData != "mqtt") {
-        if (document.querySelector("#station").checked) bodyData["station"] = 1;
-        else bodyData["station"] = 0;
+        bodyData["station"] = station.checked ? 1 : 0;
+        bodyData["dhcp"] = dhcp.checked ? 1 : 0;
+
+        console.log(bodyData);
     }
 
     if (Object.keys(bodyData).length == objLength) {

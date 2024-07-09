@@ -75,17 +75,11 @@ class Component {
         NET_TEMPLATE netConfig;
         MQTT_TEMPLATE mqttConfig;
         
-        unsigned int restartReason; 
         unsigned int counter;
     public:
         void begin() {
             // file system init
             LittleFS.begin();
-            
-            // load the int number that represents the reason of the restart.
-            // 1 = EN button
-            // 3 = Software reason, like ESP.restart()
-            this->restartReason = (int) esp_reset_reason();
 
             // load wifi and mqtt configuration from file system
             this->loadConfiguration();
@@ -173,8 +167,11 @@ class Component {
         }
 
         void beginWifi() {
-            // If the restart reason is caused by EN ESP32 button trigger, start softAP.
-            if (this->restartReason == 1) {
+            // If the restart reason is caused by reed switch, start softAP.
+            if (EEPROM.read(1) == 1) {
+                EEPROM.write(1, 0);
+                EEPROM.commit();
+                delay(5000);
                 this->beginSoftAP();
                 return;
             }
@@ -370,7 +367,7 @@ class Component {
                 File file = LittleFS.open("/main.js", "r");
                 String scriptContent = file.readString();
 
-                if (this->netConfig.stationMode && this->restartReason != 1) {
+                if (this->netConfig.stationMode && WiFi.getMode() == WIFI_MODE_STA) {
                     scriptContent.replace("__IPADDRESS_VALUE__", this->netConfig.ip.toString());
                     request->send(200, "application/javascript", scriptContent);
                     return;
