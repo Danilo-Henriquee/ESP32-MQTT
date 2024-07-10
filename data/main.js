@@ -14,12 +14,12 @@ applyBytton.addEventListener("click", () => {
     if (confirm("You confirm to apply changes?")) applyChanges();
 });
 
-let inputs = document.querySelectorAll('input[type="text"]');
+let ipv4s = document.querySelectorAll('.network[ipv4]');
 
 document.addEventListener("DOMContentLoaded", () => requestData());
 
 dhcp.addEventListener("change", function() {
-    for (let input of inputs) {
+    for (let input of ipv4s) {
         if (this.checked) input.disabled = true;
         else input.disabled = false;
     };
@@ -27,15 +27,25 @@ dhcp.addEventListener("change", function() {
 
 // Send data to save the configuration
 function sendData(classData, objLength) {
+    let bodyData = {};
+    let flag = false;
 
     // validate form inputs before send
-    let bodyData = validateData(document.querySelectorAll(`.${classData}`));
+    bodyData = validateData(
+        dhcp.checked ? document.querySelectorAll("#ssid, #wifiPass") : document.querySelectorAll(`.${classData}`)
+    );
 
     if (classData != "mqtt") {
-        bodyData["dhcp"] = dhcp.checked ? 1 : 0;
+        if (dhcp.checked) {
+            bodyData["dhcp"] = 1;
+            flag = true;
+        }
+        else {
+            bodyData["dhcp"] = 0;
+        }
     }
 
-    if (Object.keys(bodyData).length == objLength) {
+    if (Object.keys(bodyData).length == objLength || flag) {
         fetch(`http://${__IPADDRESS__}/${classData}`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -88,7 +98,6 @@ function validateData(elements) {
                     continue;
                 }
             }
-
             data[`${element.id}`] = element.value;
             continue;
         }
@@ -163,7 +172,7 @@ function loadContent(configs) {
             if (input.type == "checkbox" && configs.network[input.id] == 1) {
                 input.checked = true;
 
-                for (let inp of inputs) {
+                for (let inp of ipv4s) {
                     inp.disabled = true;
                 };
             }

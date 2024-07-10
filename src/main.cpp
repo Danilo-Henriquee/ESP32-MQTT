@@ -24,6 +24,8 @@ void setup() {
     EEPROM.begin(8);
     Serial.begin(9600);
     
+    esp_task_wdt_init(1, true);
+
     pinMode(INPUT_PIN, INPUT);
 
     comp.begin();
@@ -34,10 +36,6 @@ void setup() {
     attachInterrupt(digitalPinToInterrupt(INPUT_PIN), []() {
         saveCounter = true;
     }, RISING);
-
-    attachInterrupt(digitalPinToInterrupt(RESET_PIN), []() {
-        reset = true;
-    }, FALLING);
 
     interval = comp.getInterval();
     startTime = millis();
@@ -51,13 +49,6 @@ void loop() {
         counter = comp.incrementCounter();
         EEPROM.write(0, counter);
         EEPROM.commit();
-    }
-
-    if (reset) {
-        EEPROM.write(1, 1);
-        EEPROM.commit();
-        delay(5000);
-        ESP.restart();
     }
 
     if (millis() - startTime > (interval * 1000)) {
