@@ -193,7 +193,6 @@ class Component {
         void beginWifi() {
             // If the restart reason is caused by reed switch, start softAP.
             if (EEPROM.read(1) == 1) {
-                Serial.println("SOFTAP");
                 EEPROM.write(1, 0);
                 EEPROM.commit();
                 delay(5000);
@@ -340,19 +339,20 @@ class Component {
                 Serial.println("Subscribed in " + dataTopic);
             };
 
+            this->publishDweb08Data();
+
             Serial.println("Configuring callback...");
             this->mqtt.setCallback(
                 [this, networkTopic, mqttTopic, dataTopic](char *msgTopic, byte *data, unsigned int length) {
                     String topicMessage = String(msgTopic);
                     // MQTT message receptors
-                    if (topicMessage.equals(networkTopic))
+                    if (topicMessage.equals(networkTopic)) 
                         Component::handleMqttMessageBody("/network.json", data, length);
                     if (topicMessage.equals(mqttTopic))
                         Component::handleMqttMessageBody("/mqtt.json", data, length);
 
                     // MQTT message senders
-                    if (topicMessage.equals(dataTopic))
-                        this->publishDweb08Data();
+                    if (topicMessage.equals(dataTopic)) this->publishDweb08Data();
                 });
             Serial.println("--------------------");
         }
@@ -424,12 +424,13 @@ class Component {
 
                 doc["status"]["counter"] = this->counter;
                 doc["status"]["GPIO"] = digitalRead(INPUT_PIN) ? true : false;
+                doc["status"]["wifiQuality"] = WiFi.RSSI();
 
                 sensors.requestTemperatures();
                 for (unsigned int i = 0; i < 4; i++) {
                     float temp = sensors.getTempCByIndex(i);
                     if (temp != DEVICE_DISCONNECTED_C) {
-                            doc["status"]["temperatures"].add(temp);
+                        doc["status"]["temperatures"].add(temp);
                     }   
                 }
                     
@@ -521,6 +522,8 @@ class Component {
             doc["timestamp"] = millis();
             doc["counter"] = this->counter;
             doc["GPIO"] = digitalRead(INPUT_PIN);
+            doc["wifiQuality"] = WiFi.RSSI();
+            doc["ip"] = WiFi.localIP();
 
             sensors.requestTemperatures();
             for (unsigned int i = 0; i < 4; i++) {

@@ -1,3 +1,5 @@
+let wifiQuality = -30;
+
 const networkButton = document.querySelector("#network-save");
 const mqttButton = document.querySelector("#mqtt-save");
 const applyBytton = document.querySelector("#apply-changes");
@@ -31,9 +33,8 @@ function sendData(classData, objLength) {
     let flag = false;
 
     // validate form inputs before send
-    bodyData = validateData(
-        dhcp.checked ? document.querySelectorAll("#ssid, #wifiPass") : document.querySelectorAll(`.${classData}`)
-    );
+    if (classData == "network" && dhcp.checked) bodyData = validateData(document.querySelectorAll("#ssid, #wifiPass"));
+    else bodyData = validateData(document.querySelectorAll(`.${classData}`));
 
     if (classData != "mqtt") {
         if (dhcp.checked) {
@@ -150,6 +151,33 @@ function loadContent(configs) {
                 continue;
             }
             
+            if (key == "wifiQuality") {
+                let quality = configs.status["wifiQuality"];
+                
+                console.log(quality);
+
+                if (quality != 0) {
+                    let parentDiv = document.createElement("div");
+                    parentDiv.classList.add("item", "panel-grid-column");
+                    let h5 = document.createElement("h5");
+                    h5.innerText = "Wi-fi quality";
+                    let childDiv = document.createElement("div");
+                    let divSquare = document.createElement("div"); 
+                    
+                    divSquare.style.width = "16px";
+                    divSquare.style.height = "16px";
+    
+                    if (quality >= -50) divSquare.style.backgroundColor = "green";
+                    else if (quality >= -70) divSquare.style.backgroundColor = "yellow";
+                    else if (quality >= -90) divSquare.style.backgroundColor = "red";
+    
+                    childDiv.append(divSquare);
+                    parentDiv.append(h5, childDiv);
+                    parent.appendChild(parentDiv);
+                }
+                continue;
+            }
+
             let div = document.createElement("div");
             div.id = `item${index}`;
             div.classList.add("item", "panel-grid-column");
