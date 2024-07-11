@@ -134,7 +134,6 @@ class Component {
 
                 while (true) {
                     if (saveCounter) {
-                        Serial.println("o1");
                         saveCounter = false;
                         comp->incrementCounter();
                         comp->writeCounterBytes();
@@ -209,10 +208,6 @@ class Component {
             if (!this->mqttConfig.broker.isEmpty()) this->mqttConfig.isConfigured = true;
 
             mqttConfigurationFile.close();
-
-            // feedback serial
-            Serial.println("Configuration loaded.");
-            Serial.println("--------------------");
         }
 
         void beginWifi() {
@@ -224,11 +219,6 @@ class Component {
                 this->beginSoftAP();
                 return;
             }
-
-            // check if network is configured
-            Serial.println("Network is configured.");
-            // check the station mode. Station = 1, Acess point = 0.
-            Serial.println("Configuring network.");
 
             // If the mode dhcp is activated, do not configure the network
             if (this->netConfig.dhcp == 0) {
@@ -247,29 +237,17 @@ class Component {
             unsigned long startTime = millis();
             while (WiFi.status() != WL_CONNECTED) {
                 delay(500);
-                Serial.print(".");
 
                 if (millis() - startTime > 10000) {
-                    Serial.println();
-                    Serial.println("Connection timeout.");
-                    Serial.print("Trying again.");
                     startTime = millis();
                     attempts++;
                     continue;
                 }
                 if (attempts == 10) {
-                    Serial.println();
-                    Serial.println("Connection failed.");
-                    Serial.println("Restarting...");
                     delay(1000);
                     ESP.restart();
                 }
             }
-
-            Serial.println();
-            Serial.println("Wifi connected.");
-            Serial.println(WiFi.localIP());
-            Serial.println("--------------------");
         }
 
         void configureNetworkListener() {
@@ -283,16 +261,11 @@ class Component {
                         esp_task_wdt_reset();
                         
                         if (millis() - startTime > 10000) {
-                            Serial.println("Connection timeout.");
-                            vTaskDelay(50 / portTICK_PERIOD_MS);
                             startTime = millis();
                             attempts++;
                             continue;
                         }
                         if (attempts == 10) {
-                            Serial.println("Connection failed.");
-                            vTaskDelay(50 / portTICK_PERIOD_MS);
-                            Serial.println("Restarting...");
                             vTaskDelay(1000 / portTICK_PERIOD_MS);
                             ESP.restart();
                         }
@@ -317,56 +290,35 @@ class Component {
                 this->mqttConfig.clientPass.c_str()
             );
 
-            Serial.print("Connecting to mqtt...");
             unsigned int attempts = 0;
             unsigned long startTime = millis();
             while (this->mqtt.state() != MQTT_CONNECTED) {
                 delay(500);
-                Serial.print(".");
 
                 if (millis() - startTime > 10000) {
-                    Serial.println();
-                    Serial.println(this->mqtt.state());
-                    Serial.println("Connection timeout.");
                     startTime = millis();
                     attempts++;
                     continue;
                 }
                 if (attempts > 10) {
-                    Serial.println("Reconnection failed");
-                    Serial.println("Restaring...");
                     ESP.restart();
                 }
             }
-            Serial.println();
-            Serial.println("Connected to broker.");
-            Serial.println(this->mqttConfig.broker);
 
-            // subscribing to topic
-            Serial.println("Subscribing...");
             String topic = this->mqttConfig.topic;
-            if (this->mqtt.subscribe(topic.c_str())) {
-                Serial.println("Subscribed in " + topic);
-            };
+            this->mqtt.subscribe(topic.c_str());
 
             String networkTopic = this->mqttConfig.topic + "/network";
-            if (this->mqtt.subscribe(networkTopic.c_str())) {
-                Serial.println("Subscribed in " + networkTopic);
-            };
+            this->mqtt.subscribe(networkTopic.c_str());
 
             String mqttTopic = this->mqttConfig.topic + "/mqtt";
-            if (this->mqtt.subscribe(mqttTopic.c_str())) {
-                Serial.println("Subscribed in " + mqttTopic);
-            };
+            this->mqtt.subscribe(mqttTopic.c_str());
 
             String dataTopic = this->mqttConfig.topic + "/data";
-            if (this->mqtt.subscribe(dataTopic.c_str())) {
-                Serial.println("Subscribed in " + dataTopic);
-            };
+            this->mqtt.subscribe(dataTopic.c_str());
 
             this->publishDweb08Data();
 
-            Serial.println("Configuring callback...");
             this->mqtt.setCallback(
                 [this, networkTopic, mqttTopic, dataTopic](char *msgTopic, byte *data, unsigned int length) {
                     String topicMessage = String(msgTopic);
@@ -379,7 +331,6 @@ class Component {
                     // MQTT message senders
                     if (topicMessage.equals(dataTopic)) this->publishDweb08Data();
                 });
-            Serial.println("--------------------");
         }
 
         void configureMqttListener() {
@@ -492,16 +443,8 @@ class Component {
         }
 
         void beginSoftAP() {
-            Serial.println();
-            Serial.println("Creating acess point...");
             WiFi.softAPConfig(LOCAL_IP, GATEWAY, SUBNET);
-
-            if (WiFi.softAP(AP_SSID, AP_PASS))
-            {
-                Serial.println("Acess point created.");
-                Serial.println(LOCAL_IP.toString());
-                Serial.println("--------------------");
-            }
+            WiFi.softAP(AP_SSID, AP_PASS);
         }
 
         static void handleMqttMessageBody(String path, byte *data, unsigned int length) {
