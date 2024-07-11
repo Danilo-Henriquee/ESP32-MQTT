@@ -23,9 +23,9 @@ OneWire wire(TEMP_PIN);
 DallasTemperature sensors(&wire);
 
 volatile bool restart = false;
+volatile bool saveCounter = false;
 
-struct NET_TEMPLATE
-{
+struct NET_TEMPLATE {
     IPAddress ip;
     IPAddress gateway;
     IPAddress dns;
@@ -78,13 +78,17 @@ class Component {
         NET_TEMPLATE netConfig;
         MQTT_TEMPLATE mqttConfig;
 
-        unsigned int counter;
+        uint16_t counter;
 
     public:
         void begin() {
             // file system init
             LittleFS.begin();
 
+            this->getCounterBytes();
+            this->configureCounterListener();
+
+            // Listen the port
             this->configureRestartListener();
 
             // load wifi and mqtt configuration from file system
@@ -117,6 +121,27 @@ class Component {
 
             // web server init
             this->server.begin();
+        }
+
+        void configureCounterListener() {
+            xTaskCreatePinnedToCore([](void* pvParameters) {
+                Component* comp = static_cast<Component*>(pvParameters);
+                uint16_t counter;
+
+                attachInterrupt(digitalPinToInterrupt(INPUT_PIN), []() {
+                    saveCounter = true;
+                }, RISING);
+
+                while (true) {
+                    if (saveCounter) {
+                        Serial.println("o1");
+                        saveCounter = false;
+                        comp->incrementCounter();
+                        comp->writeCounterBytes();
+                        vTaskDelay(150 / portTICK_PERIOD_MS);
+                    }
+                }   
+            }, "counterListener", 4096, this, 1, NULL, tskNO_AFFINITY);
         }
 
         void configureRestartListener() {
@@ -520,8 +545,8 @@ class Component {
             doc["slaves"].add(1);
 
             doc["timestamp"] = millis();
-            doc["counter"] = this->counter;
-            doc["GPIO"] = digitalRead(INPUT_PIN);
+            doc["counter"] = this->getCounter();
+            doc["GPIO"] = digitalRead(INPUT_PIN) ? true : false;
             doc["wifiQuality"] = WiFi.RSSI();
             doc["ip"] = WiFi.localIP();
 
@@ -549,16 +574,56 @@ class Component {
             return this->mqttConfig.interval;
         }
 
-        unsigned int getCounter() {
+        uint16_t getCounter() {
+            this->getCounterBytes();
             return this->counter;
         }
-
-        void setCounter(unsigned int counter) {
-            this->counter = counter;
+        
+        void incrementCounter() {
+            this->counter += 1;
         }
 
-        unsigned int incrementCounter() {
-            return ++this->counter;
+        void writeCounterBytes() {
+            uint16_t counter = this->counter;
+
+            bool bits[16] = {0};
+
+            uint index = 0;
+            while (counter != 0) {
+                bits[index++] = counter % 2;
+                counter /= 2;
+            }
+
+            byte bytes[2] = {0};
+            index = 0;
+            uint8_t decimal = 0;
+            int pot = 1;
+            for (uint i = 0; i < 16; i++) {
+                if (bits[i]) {
+                    decimal += pot;
+                }
+                pot *= 2;
+                if (i == 7 || i == 15) {
+                    bytes[index++] = decimal;
+                    decimal = 0;
+                    pot = 1;
+                }
+            }
+
+            // MSB
+            EEPROM.write(2, bytes[1]);
+            // LSB
+            EEPROM.write(3, bytes[0]);
+            EEPROM.commit();
+        }
+
+        void getCounterBytes() {
+            byte bytes[2] = {
+                EEPROM.read(2),
+                EEPROM.read(3)
+            };
+            uint16_t decimal = (bytes[0] << 8) | bytes[1];
+            this->counter = decimal;
         }
 };
 
